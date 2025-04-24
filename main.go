@@ -78,8 +78,8 @@ type actionKeyMap struct {
 	Neovim   key.Binding
 	Finder   key.Binding
 	Sublime  key.Binding
-	IntelliJ key.Binding
-	PyCharm  key.Binding
+	Trae     key.Binding
+	TextMate key.Binding
 	Delete   key.Binding
 	Back     key.Binding
 }
@@ -125,13 +125,13 @@ func newActionKeyMap() actionKeyMap {
 			key.WithKeys("s"),
 			key.WithHelp("s", "open in Sublime Text"),
 		),
-		IntelliJ: key.NewBinding(
-			key.WithKeys("i"),
-			key.WithHelp("i", "open in IntelliJ IDEA"),
+		Trae: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "open in Trae"),
 		),
-		PyCharm: key.NewBinding(
-			key.WithKeys("p"),
-			key.WithHelp("p", "open in PyCharm"),
+		TextMate: key.NewBinding(
+			key.WithKeys("m"),
+			key.WithHelp("m", "open in TextMate"),
 		),
 		Delete: key.NewBinding(
 			key.WithKeys("d"),
@@ -563,17 +563,17 @@ func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Quit
 				}
 
-			case key.Matches(msg, actionKeys.IntelliJ):
+			case key.Matches(msg, actionKeys.Trae):
 				if m.selectedItem != nil {
-					cmd := exec.Command("idea", m.selectedItem.path)
+					cmd := exec.Command("trae", m.selectedItem.path)
 					cmd.Start()
 					m.quitting = true
 					return m, tea.Quit
 				}
 
-			case key.Matches(msg, actionKeys.PyCharm):
+			case key.Matches(msg, actionKeys.TextMate):
 				if m.selectedItem != nil {
-					cmd := exec.Command("pycharm", m.selectedItem.path)
+					cmd := exec.Command("mate", m.selectedItem.path)
 					cmd.Start()
 					m.quitting = true
 					return m, tea.Quit
@@ -602,56 +602,66 @@ func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		} else {
-			// Handle main list view
-			switch {
-			case key.Matches(msg, m.keys.Quit):
-				m.quitting = true
-				return m, tea.Quit
-
-			case key.Matches(msg, m.keys.Select):
-				if len(m.list.Items()) > 0 {
-					selected, ok := m.list.SelectedItem().(projectItem)
-					if ok {
-						m.selectedItem = &selected
-						m.showActions = true
-					}
+			// Check if filtering is active before processing shortcuts
+			if m.list.FilterState() == list.Filtering {
+				// When filtering is active, only handle the Quit shortcut
+				// and pass all other key events to the list
+				if key.Matches(msg, m.keys.Quit) {
+					m.quitting = true
+					return m, tea.Quit
 				}
-				return m, nil
+			} else {
+				// Handle main list view when not filtering
+				switch {
+				case key.Matches(msg, m.keys.Quit):
+					m.quitting = true
+					return m, tea.Quit
 
-			case key.Matches(msg, m.keys.Add):
-				m.showForm = true
-				for i := range m.formInputs {
-					if i == 0 {
-						m.formInputs[i].Focus()
-					} else {
-						m.formInputs[i].Blur()
-					}
-				}
-				m.formFocused = 0
-				return m, nil
-
-			case key.Matches(msg, m.keys.Delete):
-				if len(m.list.Items()) > 0 {
-					selected, ok := m.list.SelectedItem().(projectItem)
-					if ok {
-						removeProject(selected.name)
-
-						// Reload projects
-						config := loadConfig()
-						items := []list.Item{}
-
-						for _, p := range config.Projects {
-							cat := p.Category
-							if cat == "" {
-								cat = "Uncategorized"
-							}
-							items = append(items, projectItem{name: p.Name, path: p.Path, category: cat})
+				case key.Matches(msg, m.keys.Select):
+					if len(m.list.Items()) > 0 {
+						selected, ok := m.list.SelectedItem().(projectItem)
+						if ok {
+							m.selectedItem = &selected
+							m.showActions = true
 						}
-
-						m.list.SetItems(items)
 					}
+					return m, nil
+
+				case key.Matches(msg, m.keys.Add):
+					m.showForm = true
+					for i := range m.formInputs {
+						if i == 0 {
+							m.formInputs[i].Focus()
+						} else {
+							m.formInputs[i].Blur()
+						}
+					}
+					m.formFocused = 0
+					return m, nil
+
+				case key.Matches(msg, m.keys.Delete):
+					if len(m.list.Items()) > 0 {
+						selected, ok := m.list.SelectedItem().(projectItem)
+						if ok {
+							removeProject(selected.name)
+
+							// Reload projects
+							config := loadConfig()
+							items := []list.Item{}
+
+							for _, p := range config.Projects {
+								cat := p.Category
+								if cat == "" {
+									cat = "Uncategorized"
+								}
+								items = append(items, projectItem{name: p.Name, path: p.Path, category: cat})
+							}
+
+							m.list.SetItems(items)
+						}
+					}
+					return m, nil
 				}
-				return m, nil
 			}
 		}
 
@@ -712,8 +722,8 @@ func (m listModel) actionView() string {
 	b.WriteString("  [n] Open in Neovim\n")
 	b.WriteString("  [f] Open in Finder/File Explorer\n")
 	b.WriteString("  [s] Open in Sublime Text\n")
-	b.WriteString("  [i] Open in IntelliJ IDEA\n")
-	b.WriteString("  [p] Open in PyCharm\n")
+	b.WriteString("  [t] Open in Trae\n")
+	b.WriteString("  [m] Open in TextMate\n")
 	b.WriteString("  [d] Delete project\n")
 	b.WriteString("\n  [ESC/q] Back to list\n")
 
