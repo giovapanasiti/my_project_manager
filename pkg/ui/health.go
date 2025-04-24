@@ -114,7 +114,7 @@ func (m ListModel) RenderHealthDashboard() string {
 	scrollHint := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#B2B2B2")).
 		Align(lipgloss.Center).
-		Render("(Use ↑ and ↓ to scroll)")
+		Render("(Use ↑/↓, PgUp/PgDown, Home/End to navigate)")
 
 	// Put it all together in a nice box
 	dashboardContent := lipgloss.JoinVertical(lipgloss.Left,

@@ -72,6 +72,8 @@ type ListModel struct {
 	HealthScanned    bool                // Whether health scan has been performed
 	HealthStatus     health.HealthStatus // Project health scan results
 	ScrollOffset     int                 // Scroll position for detailed views
+	WindowWidth      int                 // Terminal window width
+	WindowHeight     int                 // Terminal window height
 }
 
 // ListKeyMap defines key bindings for the list view
@@ -280,6 +282,8 @@ func InitialModel() ListModel {
 		CategoryItems:  categoryItems,
 		SortOrder:      "asc", // Default sort order is ascending
 		ScrollOffset:   0,     // Initialize scroll position to 0
+		WindowWidth:    0,     // Will be set when tea.WindowSizeMsg is received
+		WindowHeight:   0,     // Will be set when tea.WindowSizeMsg is received
 	}
 }
 
@@ -370,7 +374,7 @@ func (m ListModel) ActionView() string {
 	scrollHint := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#B2B2B2")).
 		Italic(true).
-		Render("\n  Use ↑ and ↓ keys to scroll if content doesn't fit")
+		Render("\n  Use ↑/↓ to scroll, PgUp/PgDown for faster scrolling, Home/End to jump to top/bottom")
 
 	b.WriteString(scrollHint)
 

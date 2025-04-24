@@ -1,0 +1,1 @@
+go build -o mpm && sudo mv mpm /usr/local/bin/mpm

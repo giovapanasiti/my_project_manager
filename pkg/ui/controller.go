@@ -41,6 +41,11 @@ func (m ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
+		// Store window dimensions in the model
+		m.WindowWidth = msg.Width
+		m.WindowHeight = msg.Height
+
+		// Adjust the list size
 		headerHeight := lipgloss.Height(m.HeaderView())
 		footerHeight := lipgloss.Height(m.FooterView())
 		verticalMarginHeight := headerHeight + footerHeight
@@ -173,8 +178,43 @@ func handleActionsView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "down":
 		// Scroll down (increase offset)
 		m.ScrollOffset++
-		// We don't enforce a maximum scroll limit here, as it depends on content height
-		// The View method will handle this appropriately
+		return m, nil
+
+	// Add page up/down for faster scrolling
+	case msg.String() == "pgup":
+		// Page up - scroll up by ~half screen
+		pageSize := 10
+		if m.WindowHeight > 0 {
+			pageSize = m.WindowHeight / 2
+		}
+
+		if m.ScrollOffset >= pageSize {
+			m.ScrollOffset -= pageSize
+		} else {
+			m.ScrollOffset = 0 // Go to top if near the top
+		}
+		return m, nil
+
+	case msg.String() == "pgdown":
+		// Page down - scroll down by ~half screen
+		pageSize := 10
+		if m.WindowHeight > 0 {
+			pageSize = m.WindowHeight / 2
+		}
+		m.ScrollOffset += pageSize
+		// View method will handle maximum bounds checking
+		return m, nil
+
+	// Home and End keys for quick navigation
+	case msg.String() == "home":
+		// Jump to top
+		m.ScrollOffset = 0
+		return m, nil
+
+	case msg.String() == "end":
+		// Jump to bottom - we'll use a large value and let
+		// the View method handle the actual maximum
+		m.ScrollOffset = 9999
 		return m, nil
 
 	case key.Matches(msg, actionKeys.GoTo):
@@ -545,20 +585,31 @@ func (m ListModel) View() string {
 		// Split the content into lines
 		lines := strings.Split(fullContent, "\n")
 
-		// Use a fixed height for visible area - this should be adjusted based on typical terminal sizes
-		// For a typical TUI app, something around 30-40 lines is reasonable
-		const visibleHeight = 30
+		// Use the terminal height to determine visible area
+		var visibleHeight int
+		if m.WindowHeight > 0 {
+			// Calculate visible area based on window height with some margins
+			// Subtract some lines for UI chrome, indicators, etc.
+			visibleHeight = m.WindowHeight - 6
+		} else {
+			// Fallback to a reasonable default if window height is not available
+			visibleHeight = 30
+		}
 
 		// Apply scrolling offset, ensuring bounds checking
 		startLine := m.ScrollOffset
 		if startLine < 0 {
 			startLine = 0
 		}
-		if startLine > len(lines)-visibleHeight {
-			startLine = len(lines) - visibleHeight
-			if startLine < 0 {
-				startLine = 0 // In case content is shorter than visible height
-			}
+
+		// Make sure we don't scroll past the content
+		maxStartLine := len(lines) - visibleHeight
+		if maxStartLine < 0 {
+			maxStartLine = 0 // Content is shorter than visible area
+		}
+
+		if startLine > maxStartLine {
+			startLine = maxStartLine
 		}
 
 		endLine := startLine + visibleHeight
@@ -573,8 +624,20 @@ func (m ListModel) View() string {
 		hasMoreAbove := startLine > 0
 		hasMoreBelow := endLine < len(lines)
 
-		// Width for scroll indicators
+		// Width for scroll indicators - adjust based on window width
 		indicatorWidth := 40
+		if m.WindowWidth > 0 && m.WindowWidth < 80 {
+			indicatorWidth = m.WindowWidth / 2
+		}
+
+		// Calculate scroll position indicator
+		var scrollPositionInfo string
+		if len(lines) > visibleHeight {
+			// Calculate percentage
+			percentScrolled := float64(startLine) / float64(maxStartLine) * 100
+			scrollPositionInfo = fmt.Sprintf("(%d of %d lines, %.0f%%)",
+				startLine+1, len(lines), percentScrolled)
+		}
 
 		// Create the final view with scroll indicators
 		if hasMoreAbove {
@@ -582,7 +645,7 @@ func (m ListModel) View() string {
 				Foreground(lipgloss.Color("#7D56F4")).
 				Align(lipgloss.Center).
 				Width(indicatorWidth).
-				Render("▲ Scroll Up with ↑ ▲")
+				Render("▲ Scroll Up with ↑ ▲ " + scrollPositionInfo)
 			visibleContent = scrollUpIndicator + "\n" + visibleContent
 		}
 
