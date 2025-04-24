@@ -12,6 +12,7 @@ import (
 
 	"mpm/pkg/config"
 	"mpm/pkg/fs"
+	"mpm/pkg/health"
 )
 
 // ProjectItem represents a project in the UI list
@@ -62,12 +63,15 @@ type ListModel struct {
 	FileChart        []fs.FileEntry
 	FileTypeCounts   []fs.FileTypeCount
 	GitInfo          fs.GitInfo
-	QuitCommand      string      // To store the command to execute after quitting
-	ViewMode         string      // "projects" or "categories"
-	SelectedCategory string      // Currently selected category in category view
-	CategoryItems    []list.Item // Store category items for category view
-	ProjectItems     []list.Item // Store project items for project view
-	SortOrder        string      // "asc" or "desc" for project sorting
+	QuitCommand      string              // To store the command to execute after quitting
+	ViewMode         string              // "projects" or "categories"
+	SelectedCategory string              // Currently selected category in category view
+	CategoryItems    []list.Item         // Store category items for category view
+	ProjectItems     []list.Item         // Store project items for project view
+	SortOrder        string              // "asc" or "desc" for project sorting
+	HealthScanned    bool                // Whether health scan has been performed
+	HealthStatus     health.HealthStatus // Project health scan results
+	ScrollOffset     int                 // Scroll position for detailed views
 }
 
 // ListKeyMap defines key bindings for the list view
@@ -251,7 +255,7 @@ func InitialModel() ListModel {
 
 	// Set up list with project items initially
 	l := list.New(projectItems, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "My Project Manager (MPM) - Projects"
+	l.Title = "(MPM) - Projects"
 	l.Styles.Title = TitleStyle
 	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA07A"))
 	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8C00"))
@@ -275,6 +279,7 @@ func InitialModel() ListModel {
 		ProjectItems:   projectItems,
 		CategoryItems:  categoryItems,
 		SortOrder:      "asc", // Default sort order is ascending
+		ScrollOffset:   0,     // Initialize scroll position to 0
 	}
 }
 
@@ -360,6 +365,14 @@ func (m ListModel) ActionView() string {
 	b.WriteString("  [m] Open in TextMate\n")
 	b.WriteString("  [d] Delete project\n")
 	b.WriteString("\n  [ESC/q] Back to list\n")
+
+	// Add scroll hint
+	scrollHint := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#B2B2B2")).
+		Italic(true).
+		Render("\n  Use ↑ and ↓ keys to scroll if content doesn't fit")
+
+	b.WriteString(scrollHint)
 
 	return b.String()
 }

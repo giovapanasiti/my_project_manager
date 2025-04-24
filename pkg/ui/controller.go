@@ -15,6 +15,7 @@ import (
 
 	"mpm/pkg/config"
 	"mpm/pkg/fs"
+	"mpm/pkg/health"
 )
 
 // Custom message type to hold command output
@@ -155,6 +156,25 @@ func handleActionsView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, actionKeys.Back):
 		m.ShowActions = false
+		// Reset health scan status when going back to the list
+		m.HealthScanned = false
+		// Reset scroll position
+		m.ScrollOffset = 0
+		return m, nil
+
+	// Handle arrow keys for scrolling
+	case msg.String() == "up":
+		// Scroll up (decrease offset)
+		if m.ScrollOffset > 0 {
+			m.ScrollOffset--
+		}
+		return m, nil
+
+	case msg.String() == "down":
+		// Scroll down (increase offset)
+		m.ScrollOffset++
+		// We don't enforce a maximum scroll limit here, as it depends on content height
+		// The View method will handle this appropriately
 		return m, nil
 
 	case key.Matches(msg, actionKeys.GoTo):
@@ -388,7 +408,7 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						// Switch to projects view with filtered projects
 						m.ViewMode = "projects"
 						m.List.SetItems(filteredProjects)
-						m.List.Title = fmt.Sprintf("My Project Manager (MPM) - %s", selected.Name)
+						m.List.Title = fmt.Sprintf("(MPM) - %s", selected.Name)
 					}
 				} else {
 					// In projects view, selecting a project shows actions
@@ -396,8 +416,9 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					if ok {
 						m.SelectedItem = &selected
 						m.ShowActions = true
+						m.ScrollOffset = 0 // Reset scroll position when entering details view
 
-						// Scan the project directory for file chart
+						// Scan the project directory for file chart and health status
 						projectPath := m.SelectedItem.Path
 						if _, err := os.Stat(projectPath); err == nil {
 							// Scan directory with max depth of 3
@@ -406,6 +427,11 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 							m.FileTypeCounts = fs.CountFileTypes(m.FileChart)
 							// Check Git status
 							m.GitInfo = fs.CheckGitStatus(projectPath)
+							// Perform project health scan just once and cache the result
+							if !m.HealthScanned {
+								m.HealthStatus = health.ScanProjectHealth(projectPath)
+								m.HealthScanned = true
+							}
 						}
 					}
 				}
@@ -500,7 +526,76 @@ func (m ListModel) View() string {
 	}
 
 	if m.ShowActions {
-		return m.ActionView()
+		// Get content for both sections
+		actionView := m.ActionView()
+		healthDashboard := m.RenderHealthDashboard()
+
+		// Add a separator between sections
+		separator := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7D56F4")).
+			Render("─────────────────────────────────────────")
+
+		// Combine all sections
+		fullContent := lipgloss.JoinVertical(lipgloss.Left,
+			actionView,
+			separator,
+			healthDashboard,
+		)
+
+		// Split the content into lines
+		lines := strings.Split(fullContent, "\n")
+
+		// Use a fixed height for visible area - this should be adjusted based on typical terminal sizes
+		// For a typical TUI app, something around 30-40 lines is reasonable
+		const visibleHeight = 30
+
+		// Apply scrolling offset, ensuring bounds checking
+		startLine := m.ScrollOffset
+		if startLine < 0 {
+			startLine = 0
+		}
+		if startLine > len(lines)-visibleHeight {
+			startLine = len(lines) - visibleHeight
+			if startLine < 0 {
+				startLine = 0 // In case content is shorter than visible height
+			}
+		}
+
+		endLine := startLine + visibleHeight
+		if endLine > len(lines) {
+			endLine = len(lines)
+		}
+
+		// Create the scrolled view
+		visibleContent := strings.Join(lines[startLine:endLine], "\n")
+
+		// Add scroll indicators if needed
+		hasMoreAbove := startLine > 0
+		hasMoreBelow := endLine < len(lines)
+
+		// Width for scroll indicators
+		indicatorWidth := 40
+
+		// Create the final view with scroll indicators
+		if hasMoreAbove {
+			scrollUpIndicator := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#7D56F4")).
+				Align(lipgloss.Center).
+				Width(indicatorWidth).
+				Render("▲ Scroll Up with ↑ ▲")
+			visibleContent = scrollUpIndicator + "\n" + visibleContent
+		}
+
+		if hasMoreBelow {
+			scrollDownIndicator := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#7D56F4")).
+				Align(lipgloss.Center).
+				Width(indicatorWidth).
+				Render("▼ Scroll Down with ↓ ▼")
+			visibleContent = visibleContent + "\n" + scrollDownIndicator
+		}
+
+		return visibleContent
 	}
 
 	return fmt.Sprintf("%s\n%s\n%s", m.HeaderView(), m.List.View(), m.FooterView())
