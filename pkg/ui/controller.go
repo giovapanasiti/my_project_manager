@@ -92,17 +92,28 @@ func handleFormView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 				// Reload projects for the list
 				refreshedConfig := config.LoadConfig()
-				items := []list.Item{}
+				m.ProjectItems = []list.Item{}
 
 				for _, p := range refreshedConfig.Projects {
 					cat := p.Category
 					if cat == "" {
 						cat = "Uncategorized"
 					}
-					items = append(items, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
+					m.ProjectItems = append(m.ProjectItems, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
 				}
 
-				m.List.SetItems(items)
+				// Apply current sort order to the updated project list
+				if m.SortOrder == "asc" {
+					sort.Slice(m.ProjectItems, func(i, j int) bool {
+						return m.ProjectItems[i].(ProjectItem).Name < m.ProjectItems[j].(ProjectItem).Name
+					})
+				} else {
+					sort.Slice(m.ProjectItems, func(i, j int) bool {
+						return m.ProjectItems[i].(ProjectItem).Name > m.ProjectItems[j].(ProjectItem).Name
+					})
+				}
+
+				m.List.SetItems(m.ProjectItems)
 
 				// Reset form
 				for i := range m.FormInputs {
@@ -232,17 +243,28 @@ func handleActionsView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 			// Reload projects
 			refreshedConfig := config.LoadConfig()
-			items := []list.Item{}
+			m.ProjectItems = []list.Item{}
 
 			for _, p := range refreshedConfig.Projects {
 				cat := p.Category
 				if cat == "" {
 					cat = "Uncategorized"
 				}
-				items = append(items, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
+				m.ProjectItems = append(m.ProjectItems, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
 			}
 
-			m.List.SetItems(items)
+			// Apply current sort order
+			if m.SortOrder == "asc" {
+				sort.Slice(m.ProjectItems, func(i, j int) bool {
+					return m.ProjectItems[i].(ProjectItem).Name < m.ProjectItems[j].(ProjectItem).Name
+				})
+			} else {
+				sort.Slice(m.ProjectItems, func(i, j int) bool {
+					return m.ProjectItems[i].(ProjectItem).Name > m.ProjectItems[j].(ProjectItem).Name
+				})
+			}
+
+			m.List.SetItems(m.ProjectItems)
 			m.ShowActions = false
 		}
 		return m, nil
@@ -268,6 +290,42 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.Quitting = true
 			return m, tea.Quit
 
+		case key.Matches(msg, m.Keys.Sort):
+			// Only sort in projects view
+			if m.ViewMode == "projects" {
+				// Toggle sort order between asc and desc
+				if m.SortOrder == "asc" {
+					m.SortOrder = "desc"
+					// Sort projects in descending order
+					sort.Slice(m.ProjectItems, func(i, j int) bool {
+						return m.ProjectItems[i].(ProjectItem).Name > m.ProjectItems[j].(ProjectItem).Name
+					})
+				} else {
+					m.SortOrder = "asc"
+					// Sort projects in ascending order
+					sort.Slice(m.ProjectItems, func(i, j int) bool {
+						return m.ProjectItems[i].(ProjectItem).Name < m.ProjectItems[j].(ProjectItem).Name
+					})
+				}
+
+				// Apply sorting to the current view
+				if m.SelectedCategory != "" {
+					// We're in a filtered category view, reapply the filter with new sorting
+					filteredProjects := []list.Item{}
+					for _, item := range m.ProjectItems {
+						project := item.(ProjectItem)
+						if project.Category == m.SelectedCategory {
+							filteredProjects = append(filteredProjects, project)
+						}
+					}
+					m.List.SetItems(filteredProjects)
+				} else {
+					// We're in the main projects view
+					m.List.SetItems(m.ProjectItems)
+				}
+			}
+			return m, nil
+
 		case key.Matches(msg, m.Keys.Up):
 			// Handle up navigation directly
 			if m.List.Index() > 0 {
@@ -287,13 +345,14 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.ViewMode == "projects" {
 				// Switch to categories view
 				m.ViewMode = "categories"
+				m.SelectedCategory = "" // Reset selected category when switching to categories view
 				m.List.SetItems(m.CategoryItems)
-				m.List.Title = "My Project Manager (MPM) - Categories"
+				m.List.Title = "(MPM) - Categories"
 			} else {
 				// Switch to projects view
 				m.ViewMode = "projects"
 				m.List.SetItems(m.ProjectItems)
-				m.List.Title = "My Project Manager (MPM) - Projects"
+				m.List.Title = "(MPM) - Projects"
 			}
 			return m, nil
 
@@ -313,6 +372,17 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 							if project.Category == selected.Name {
 								filteredProjects = append(filteredProjects, project)
 							}
+						}
+
+						// Apply current sort order to filtered projects
+						if m.SortOrder == "asc" {
+							sort.Slice(filteredProjects, func(i, j int) bool {
+								return filteredProjects[i].(ProjectItem).Name < filteredProjects[j].(ProjectItem).Name
+							})
+						} else {
+							sort.Slice(filteredProjects, func(i, j int) bool {
+								return filteredProjects[i].(ProjectItem).Name > filteredProjects[j].(ProjectItem).Name
+							})
 						}
 
 						// Switch to projects view with filtered projects
@@ -378,6 +448,17 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 						// Count projects per category
 						categoryMap[cat]++
+					}
+
+					// Apply current sort order
+					if m.SortOrder == "asc" {
+						sort.Slice(projectItems, func(i, j int) bool {
+							return projectItems[i].(ProjectItem).Name < projectItems[j].(ProjectItem).Name
+						})
+					} else {
+						sort.Slice(projectItems, func(i, j int) bool {
+							return projectItems[i].(ProjectItem).Name > projectItems[j].(ProjectItem).Name
+						})
 					}
 
 					// Create category items

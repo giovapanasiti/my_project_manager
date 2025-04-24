@@ -67,6 +67,7 @@ type ListModel struct {
 	SelectedCategory string      // Currently selected category in category view
 	CategoryItems    []list.Item // Store category items for category view
 	ProjectItems     []list.Item // Store project items for project view
+	SortOrder        string      // "asc" or "desc" for project sorting
 }
 
 // ListKeyMap defines key bindings for the list view
@@ -79,6 +80,7 @@ type ListKeyMap struct {
 	Filter     key.Binding
 	Quit       key.Binding
 	ToggleView key.Binding
+	Sort       key.Binding
 }
 
 // ActionKeyMap defines key bindings for the action view
@@ -181,6 +183,10 @@ func NewListKeyMap() ListKeyMap {
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "toggle view"),
 		),
+		Sort: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "toggle sort order"),
+		),
 	}
 }
 
@@ -227,6 +233,11 @@ func InitialModel() ListModel {
 		categoryMap[cat]++
 	}
 
+	// Sort projects alphabetically by default (ascending)
+	sort.Slice(projectItems, func(i, j int) bool {
+		return projectItems[i].(ProjectItem).Name < projectItems[j].(ProjectItem).Name
+	})
+
 	// Create category items
 	categoryItems := []list.Item{}
 	for cat, count := range categoryMap {
@@ -263,6 +274,7 @@ func InitialModel() ListModel {
 		ViewMode:       "projects",
 		ProjectItems:   projectItems,
 		CategoryItems:  categoryItems,
+		SortOrder:      "asc", // Default sort order is ascending
 	}
 }
 
@@ -277,7 +289,22 @@ func (m ListModel) FooterView() string {
 	if m.ViewMode == "categories" {
 		info = HelpStyle.Render("Press 'q' to quit, 'tab' to switch to projects view, '/' to filter, 'enter' to view projects in category")
 	} else {
-		info = HelpStyle.Render("Press 'q' to quit, 'a' to add, '/' to filter, 'tab' to switch to categories view")
+		// Show sort order in projects view
+		sortStatus := ""
+		sortStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
+		if m.SortOrder == "asc" {
+			sortStatus = sortStyle.Render("[A→Z]")
+		} else {
+			sortStatus = sortStyle.Render("[Z→A]")
+		}
+
+		// Highlight the sort key
+		sortInstruction := "'s' to sort"
+		highlightedSort := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("'s'")
+		sortInstruction = highlightedSort + " to sort"
+
+		info = HelpStyle.Render(fmt.Sprintf("Press 'q' to quit, 'a' to add, %s %s, '/' to filter, 'tab' to switch to categories view",
+			sortInstruction, sortStatus))
 	}
 	return info
 }
