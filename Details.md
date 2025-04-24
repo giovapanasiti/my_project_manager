@@ -28,23 +28,35 @@ sudo mv mpm /usr/local/bin/
 # Aggiungi questo al tuo ~/.bashrc o ~/.zshrc:
 
 echo '
-# mpm wrapper function
+# Simple mpm wrapper function for interactive navigation
 mpm() {
-  if [ "$1" = "go" ] || [ "$1" = "i" ]; then
+  if [[ "$1" = "go" ]]; then
+    # For direct cd commands
+    local output
     output=$(command mpm "$@")
-    if [[ $output == cd* ]]; then
+    if [[ "$output" == cd* ]]; then
       eval "$output"
     else
       echo "$output"
+    fi
+  elif [[ "$1" = "i" ]]; then
+    # For interactive mode
+    command mpm i
+    
+    # After exiting, check for the temporary cd command file
+    local cdfile="/tmp/mpm_cd_command"
+    if [[ -f "$cdfile" ]]; then
+      source "$cdfile"
+      rm "$cdfile"
     fi
   else
     command mpm "$@"
   fi
 }
-' >> ~/.bashrc
+' >> ~/.zshrc
 
 # 8. Ricarica il tuo shell
-source ~/.bashrc  # o source ~/.zshrc se usi zsh
+source ~/.zshrc
 
 echo "mpm è stato installato con successo!"
 echo "Usa 'mpm i' per avviare la modalità interattiva."
@@ -57,3 +69,10 @@ mpm list
 mpm go nome_progetto
 mpm remove nome_progetto
 mpm i
+
+# Instructions for using the interactive navigation:
+# 1. Run "mpm i" to open the interactive mode
+# 2. Navigate to a project and press "g"
+# 3. The application will create a temporary file with the cd command
+# 4. When you exit, the shell function will automatically source this file
+# 5. You will be navigated to the selected project directory

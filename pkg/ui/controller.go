@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -219,9 +220,23 @@ func handleActionsView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, actionKeys.GoTo):
 		if m.SelectedItem != nil {
-			// Return command to change directory for shell wrapper
+			// Instead of just returning a cd command, directly change the directory
+			// This requires different approaches depending on the OS
+			if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+				// For macOS and Linux, we can use a special technique:
+				// Write the cd command to a temporary file that the shell can source
+				cdFile := filepath.Join(os.TempDir(), "mpm_cd_command")
+				cdCommand := fmt.Sprintf("cd %s", m.SelectedItem.Path)
+				err := os.WriteFile(cdFile, []byte(cdCommand), 0644)
+				if err == nil {
+					// Inform the user what to do
+					fmt.Printf("\nTo change to the selected directory after exiting:\nsource %s\n", cdFile)
+				}
+			} else {
+				// For other platforms, we'll still use the return value approach
+				m.QuitCommand = fmt.Sprintf("cd %s", m.SelectedItem.Path)
+			}
 			m.Quitting = true
-			m.QuitCommand = fmt.Sprintf("cd %s", m.SelectedItem.Path)
 			return m, tea.Quit
 		}
 
