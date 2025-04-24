@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -281,58 +282,119 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case key.Matches(msg, m.Keys.ToggleView):
+			// Toggle between projects and categories view
+			if m.ViewMode == "projects" {
+				// Switch to categories view
+				m.ViewMode = "categories"
+				m.List.SetItems(m.CategoryItems)
+				m.List.Title = "My Project Manager (MPM) - Categories"
+			} else {
+				// Switch to projects view
+				m.ViewMode = "projects"
+				m.List.SetItems(m.ProjectItems)
+				m.List.Title = "My Project Manager (MPM) - Projects"
+			}
+			return m, nil
+
 		case key.Matches(msg, m.Keys.Select):
 			if len(m.List.Items()) > 0 {
-				selected, ok := m.List.SelectedItem().(ProjectItem)
-				if ok {
-					m.SelectedItem = &selected
-					m.ShowActions = true
+				// Handle selection based on current view mode
+				if m.ViewMode == "categories" {
+					// In category view, selecting a category shows projects in that category
+					selected, ok := m.List.SelectedItem().(CategoryItem)
+					if ok {
+						m.SelectedCategory = selected.Name
 
-					// Scan the project directory for file chart
-					projectPath := m.SelectedItem.Path
-					if _, err := os.Stat(projectPath); err == nil {
-						// Scan directory with max depth of 3
-						m.FileChart = fs.ScanDirectory(projectPath, 3, 0, "")
-						// Count file types and assign colors
-						m.FileTypeCounts = fs.CountFileTypes(m.FileChart)
-						// Check Git status
-						m.GitInfo = fs.CheckGitStatus(projectPath)
+						// Filter projects by the selected category
+						filteredProjects := []list.Item{}
+						for _, item := range m.ProjectItems {
+							project := item.(ProjectItem)
+							if project.Category == selected.Name {
+								filteredProjects = append(filteredProjects, project)
+							}
+						}
+
+						// Switch to projects view with filtered projects
+						m.ViewMode = "projects"
+						m.List.SetItems(filteredProjects)
+						m.List.Title = fmt.Sprintf("My Project Manager (MPM) - %s", selected.Name)
+					}
+				} else {
+					// In projects view, selecting a project shows actions
+					selected, ok := m.List.SelectedItem().(ProjectItem)
+					if ok {
+						m.SelectedItem = &selected
+						m.ShowActions = true
+
+						// Scan the project directory for file chart
+						projectPath := m.SelectedItem.Path
+						if _, err := os.Stat(projectPath); err == nil {
+							// Scan directory with max depth of 3
+							m.FileChart = fs.ScanDirectory(projectPath, 3, 0, "")
+							// Count file types and assign colors
+							m.FileTypeCounts = fs.CountFileTypes(m.FileChart)
+							// Check Git status
+							m.GitInfo = fs.CheckGitStatus(projectPath)
+						}
 					}
 				}
 			}
 			return m, nil
 
 		case key.Matches(msg, m.Keys.Add):
-			m.ShowForm = true
-			for i := range m.FormInputs {
-				if i == 0 {
-					m.FormInputs[i].Focus()
-				} else {
-					m.FormInputs[i].Blur()
+			// Only allow adding projects in projects view
+			if m.ViewMode == "projects" {
+				m.ShowForm = true
+				for i := range m.FormInputs {
+					if i == 0 {
+						m.FormInputs[i].Focus()
+					} else {
+						m.FormInputs[i].Blur()
+					}
 				}
+				m.FormFocused = 0
 			}
-			m.FormFocused = 0
 			return m, nil
 
 		case key.Matches(msg, m.Keys.Delete):
-			if len(m.List.Items()) > 0 {
+			// Only allow deleting projects in projects view
+			if m.ViewMode == "projects" && len(m.List.Items()) > 0 {
 				selected, ok := m.List.SelectedItem().(ProjectItem)
 				if ok {
 					config.RemoveProject(selected.Name)
 
-					// Reload projects
+					// Reload projects and rebuild category items
 					refreshedConfig := config.LoadConfig()
-					items := []list.Item{}
+					projectItems := []list.Item{}
+					categoryMap := make(map[string]int)
 
 					for _, p := range refreshedConfig.Projects {
 						cat := p.Category
 						if cat == "" {
 							cat = "Uncategorized"
 						}
-						items = append(items, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
+						projectItems = append(projectItems, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
+
+						// Count projects per category
+						categoryMap[cat]++
 					}
 
-					m.List.SetItems(items)
+					// Create category items
+					categoryItems := []list.Item{}
+					for cat, count := range categoryMap {
+						categoryItems = append(categoryItems, CategoryItem{Name: cat, Count: count})
+					}
+
+					// Sort categories alphabetically
+					sort.Slice(categoryItems, func(i, j int) bool {
+						return categoryItems[i].(CategoryItem).Name < categoryItems[j].(CategoryItem).Name
+					})
+
+					// Update model with new items
+					m.ProjectItems = projectItems
+					m.CategoryItems = categoryItems
+					m.List.SetItems(projectItems)
 				}
 			}
 			return m, nil

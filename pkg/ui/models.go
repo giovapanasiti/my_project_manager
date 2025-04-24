@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -31,31 +32,53 @@ func (i ProjectItem) Description() string {
 // FilterValue implements list.Item interface
 func (i ProjectItem) FilterValue() string { return i.Name + " " + i.Category + " " + i.Path }
 
+// CategoryItem represents a category in the category view
+type CategoryItem struct {
+	Name  string
+	Count int
+}
+
+// Title implements list.Item interface
+func (i CategoryItem) Title() string { return i.Name }
+
+// Description implements list.Item interface
+func (i CategoryItem) Description() string {
+	return fmt.Sprintf("%d projects", i.Count)
+}
+
+// FilterValue implements list.Item interface
+func (i CategoryItem) FilterValue() string { return i.Name }
+
 // ListModel is the main model for the list view
 type ListModel struct {
-	List           list.Model
-	Keys           ListKeyMap
-	SelectedItem   *ProjectItem
-	ShowActions    bool
-	ShowForm       bool
-	FormInputs     []textinput.Model
-	FormFocused    int
-	Quitting       bool
-	FileChart      []fs.FileEntry
-	FileTypeCounts []fs.FileTypeCount
-	GitInfo        fs.GitInfo
-	QuitCommand    string // To store the command to execute after quitting
+	List             list.Model
+	Keys             ListKeyMap
+	SelectedItem     *ProjectItem
+	ShowActions      bool
+	ShowForm         bool
+	FormInputs       []textinput.Model
+	FormFocused      int
+	Quitting         bool
+	FileChart        []fs.FileEntry
+	FileTypeCounts   []fs.FileTypeCount
+	GitInfo          fs.GitInfo
+	QuitCommand      string      // To store the command to execute after quitting
+	ViewMode         string      // "projects" or "categories"
+	SelectedCategory string      // Currently selected category in category view
+	CategoryItems    []list.Item // Store category items for category view
+	ProjectItems     []list.Item // Store project items for project view
 }
 
 // ListKeyMap defines key bindings for the list view
 type ListKeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Select key.Binding
-	Add    key.Binding
-	Delete key.Binding
-	Filter key.Binding
-	Quit   key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	Select     key.Binding
+	Add        key.Binding
+	Delete     key.Binding
+	Filter     key.Binding
+	Quit       key.Binding
+	ToggleView key.Binding
 }
 
 // ActionKeyMap defines key bindings for the action view
@@ -154,6 +177,10 @@ func NewListKeyMap() ListKeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
+		ToggleView: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "toggle view"),
+		),
 	}
 }
 
@@ -186,19 +213,34 @@ func InitForm() []textinput.Model {
 func InitialModel() ListModel {
 	// Load projects
 	config := config.LoadConfig()
-	items := []list.Item{}
+	projectItems := []list.Item{}
+	categoryMap := make(map[string]int)
 
 	for _, p := range config.Projects {
 		cat := p.Category
 		if cat == "" {
 			cat = "Uncategorized"
 		}
-		items = append(items, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
+		projectItems = append(projectItems, ProjectItem{Name: p.Name, Path: p.Path, Category: cat})
+
+		// Count projects per category
+		categoryMap[cat]++
 	}
 
-	// Set up list
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "My Project Manager (MPM)"
+	// Create category items
+	categoryItems := []list.Item{}
+	for cat, count := range categoryMap {
+		categoryItems = append(categoryItems, CategoryItem{Name: cat, Count: count})
+	}
+
+	// Sort categories alphabetically
+	sort.Slice(categoryItems, func(i, j int) bool {
+		return categoryItems[i].(CategoryItem).Name < categoryItems[j].(CategoryItem).Name
+	})
+
+	// Set up list with project items initially
+	l := list.New(projectItems, list.NewDefaultDelegate(), 0, 0)
+	l.Title = "My Project Manager (MPM) - Projects"
 	l.Styles.Title = TitleStyle
 	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA07A"))
 	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8C00"))
@@ -218,6 +260,9 @@ func InitialModel() ListModel {
 		FormFocused:    0,
 		FileChart:      []fs.FileEntry{},
 		FileTypeCounts: []fs.FileTypeCount{},
+		ViewMode:       "projects",
+		ProjectItems:   projectItems,
+		CategoryItems:  categoryItems,
 	}
 }
 
@@ -228,7 +273,12 @@ func (m ListModel) HeaderView() string {
 
 // FooterView returns the footer view
 func (m ListModel) FooterView() string {
-	info := HelpStyle.Render("Press 'q' to quit, 'a' to add, '/' to filter")
+	var info string
+	if m.ViewMode == "categories" {
+		info = HelpStyle.Render("Press 'q' to quit, 'tab' to switch to projects view, '/' to filter, 'enter' to view projects in category")
+	} else {
+		info = HelpStyle.Render("Press 'q' to quit, 'a' to add, '/' to filter, 'tab' to switch to categories view")
+	}
 	return info
 }
 
