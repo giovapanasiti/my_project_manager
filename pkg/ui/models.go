@@ -43,6 +43,7 @@ type ListModel struct {
 	Quitting       bool
 	FileChart      []fs.FileEntry
 	FileTypeCounts []fs.FileTypeCount
+	GitInfo        fs.GitInfo
 	QuitCommand    string // To store the command to execute after quitting
 }
 
@@ -260,6 +261,10 @@ func (m ListModel) ActionView() string {
 	path := lipgloss.NewStyle().Foreground(lipgloss.Color("#B2B2B2")).Render(m.SelectedItem.Path)
 
 	b.WriteString(fmt.Sprintf("\n  %s %s\n  %s\n\n", title, category, path))
+
+	// Add Git information
+	b.WriteString(fs.RenderGitInfo(m.GitInfo))
+	b.WriteString("\n")
 
 	// Add file type statistics if we have data
 	if len(m.FileChart) > 0 && len(m.FileTypeCounts) > 0 {

@@ -29,4 +29,13 @@ var (
 
 	// FileTypeStyle for file types
 	FileTypeStyle = lipgloss.NewStyle().Bold(true)
+
+	// GitPresentStyle for Git present indicator
+	GitPresentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8CC8C")).Bold(true)
+
+	// GitAbsentStyle for Git absent indicator
+	GitAbsentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true)
+
+	// GitRemoteStyle for Git remote information
+	GitRemoteStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
 )

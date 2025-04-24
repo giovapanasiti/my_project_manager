@@ -295,6 +295,8 @@ func handleListView(m ListModel, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.FileChart = fs.ScanDirectory(projectPath, 3, 0, "")
 						// Count file types and assign colors
 						m.FileTypeCounts = fs.CountFileTypes(m.FileChart)
+						// Check Git status
+						m.GitInfo = fs.CheckGitStatus(projectPath)
 					}
 				}
 			}
